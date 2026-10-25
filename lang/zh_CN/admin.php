@@ -4159,7 +4159,7 @@ return [
             'pdf_parser_unavailable' => 'PDF 解析进程不可用，请确认服务器已安装 PHP CLI 且允许启动子进程。',
             'pptx_invalid' => 'PPTX 结构无效或包含不安全的 XML、文件关系，请检查或重新导出文件。',
             'pptx_no_text' => 'PPTX 没有可提取的正文文本，请先将图片中的内容识别为文本。',
-            'pptx_expansion_too_large' => 'PPTX 解压后的单文件、总量或压缩比超过限制，已停止解析。',
+            'pptx_expansion_too_large' => 'PPTX 的展开大小、压缩比、结构数量或属性长度超过限制，已停止解析。',
             'files_limit' => '一次最多上传 10 个知识文档',
             'file_type_invalid' => '不支持的文件格式，请上传 TXT、MD、DOCX、PDF 或 PPTX；旧版 DOC、PPT 请先转换。',
             'in_use' => '该知识库正在被 :count 个任务引用，请先解除引用后再删除',

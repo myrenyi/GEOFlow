@@ -4099,7 +4099,7 @@ return [
             'pdf_parser_unavailable' => 'The PDF extraction process is unavailable. Check that PHP CLI is installed and child processes are allowed.',
             'pptx_invalid' => 'The PPTX structure, XML, or file relationships are invalid or unsafe. Check or re-export the file.',
             'pptx_no_text' => 'The PPTX has no extractable body text. Convert image content to text first.',
-            'pptx_expansion_too_large' => 'The expanded PPTX entry size, total size, or compression ratio exceeds the limit.',
+            'pptx_expansion_too_large' => 'The PPTX expanded size, compression ratio, structure count, or attribute length exceeds the limit.',
             'files_limit' => 'Upload up to 10 knowledge documents at a time.',
             'file_type_invalid' => 'Unsupported file type. Upload TXT, MD, DOCX, PDF, or PPTX. Convert legacy DOC and PPT files first.',
             'in_use' => 'This knowledge base is referenced by :count tasks. Remove the references before deleting it.',

@@ -3882,7 +3882,7 @@ return array_replace_recursive($base, [
             'pdf_parser_unavailable' => 'O processo de leitura de PDF está indisponível. Verifique a instalação do PHP CLI e a permissão para iniciar subprocessos.',
             'pptx_invalid' => 'A estrutura, o XML ou as relações de arquivos do PPTX são inválidos ou inseguros. Verifique ou exporte novamente.',
             'pptx_no_text' => 'O PPTX não contém texto extraível. Converta o conteúdo das imagens em texto.',
-            'pptx_expansion_too_large' => 'O tamanho expandido de uma entrada, o tamanho total ou a taxa de compressão do PPTX excede o limite.',
+            'pptx_expansion_too_large' => 'O tamanho expandido, a taxa de compressão, a quantidade de estruturas ou o comprimento dos atributos do PPTX excede o limite.',
             'files_limit' => 'Envie no máximo 10 documentos por vez',
             'file_type_invalid' => 'Formato não suportado. Envie TXT, MD, DOCX, PDF ou PPTX. Converta arquivos DOC e PPT antigos.',
             'in_use' => 'Base referenciada por :count tarefas',

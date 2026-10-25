@@ -156,6 +156,81 @@ class KnowledgeDocumentParserTest extends TestCase
         app(KnowledgeSourceParser::class)->parseUploadedKnowledgeFile($file->getPathname(), 'large-entry.pptx');
     }
 
+    public static function excessivePptxStructures(): array
+    {
+        $entries = KnowledgeDocumentFixtures::pptxEntries([1 => 'Valid slide body']);
+        $presentation = 'ppt/presentation.xml';
+        $rels = 'ppt/_rels/presentation.xml.rels';
+        $cases = [];
+
+        $copy = $entries;
+        $slideIds = '';
+        for ($index = 1; $index <= 2049; $index++) {
+            $slideIds .= '<p:sldId id="'.(255 + $index).'" r:id="rId'.$index.'"/>';
+        }
+        $copy[$presentation] = preg_replace('~<p:sldIdLst>.*</p:sldIdLst>~s', '<p:sldIdLst>'.$slideIds.'</p:sldIdLst>', $entries[$presentation]);
+        $cases['slide ID count'] = [$copy];
+
+        $copy = $entries;
+        $copy[$rels] = self::pptxRelationshipList(2049);
+        $cases['relationships in one part'] = [$copy];
+
+        $copy = $entries;
+        for ($index = 1; $index <= 8; $index++) {
+            $copy['ppt/metadata'.$index.'.xml'] = '<metadata/>';
+            $copy['ppt/_rels/metadata'.$index.'.xml.rels'] = self::pptxRelationshipList(2048);
+        }
+        $cases['relationships across the package'] = [$copy];
+
+        foreach (['empty' => '<a:t/>', 'short' => '<a:t>x</a:t>'] as $name => $node) {
+            $copy = KnowledgeDocumentFixtures::pptxEntries([1 => 'First body', 2 => 'Second body']);
+            foreach (['ppt/slides/slide1.xml', 'ppt/slides/slide2.xml'] as $slide) {
+                $copy[$slide] = str_replace('</a:r>', str_repeat($node, 50000).'</a:r>', $copy[$slide]);
+            }
+            $cases[$name.' text nodes across slides'] = [$copy];
+        }
+
+        foreach ([
+            'target byte length' => ['Target="slides/slide1.xml"', 'Target="slides/'.str_repeat('/', 1025).'slide1.xml"'],
+            'target path segments' => ['Target="slides/slide1.xml"', 'Target="'.str_repeat('./', 65).'slides/slide1.xml"'],
+            'relationship ID length' => ['Id="rId1"', 'Id="'.str_repeat('x', 256).'"'],
+            'relationship type length' => ['Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"', 'Type="'.str_repeat('x', 1025).'"'],
+            'relationship mode length' => ['Target="slides/slide1.xml"', 'TargetMode="'.str_repeat('x', 1025).'" Target="slides/slide1.xml"'],
+        ] as $name => [$search, $replacement]) {
+            $copy = $entries;
+            $copy[$rels] = str_replace($search, $replacement, $entries[$rels]);
+            $cases[$name] = [$copy];
+        }
+        $copy = $entries;
+        $copy[$presentation] = str_replace('r:id="rId1"', 'r:id="'.str_repeat('x', 256).'"', $entries[$presentation]);
+        $cases['slide relationship ID length'] = [$copy];
+
+        return $cases;
+    }
+
+    #[DataProvider('excessivePptxStructures')]
+    public function test_pptx_structure_budget_rejects_excessive_counts_and_attributes_within_archive_byte_limits(array $entries): void
+    {
+        $bytes = KnowledgeDocumentFixtures::zip($entries, \ZipArchive::CM_STORE);
+        $this->assertLessThan(8 * 1024 * 1024, strlen($bytes));
+        $this->assertLessThan(2048, count($entries));
+        $file = UploadedFile::fake()->createWithContent('structure-budget.pptx', $bytes);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
+        app(KnowledgeSourceParser::class)->parseUploadedKnowledgeFile($file->getPathname(), 'structure-budget.pptx');
+    }
+
+    private static function pptxRelationshipList(int $count): string
+    {
+        $xml = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+        for ($index = 1; $index <= $count; $index++) {
+            $xml .= '<Relationship Id="rId'.$index.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>';
+        }
+
+        return $xml.'</Relationships>';
+    }
+
     private function moderatelyCompressedBytes(int $bytes): string
     {
         $payload = '';

@@ -4148,7 +4148,7 @@ return [
             'pdf_parser_unavailable' => 'PDF 解析程序無法使用，請確認伺服器已安裝 PHP CLI 並允許啟動子程序。',
             'pptx_invalid' => 'PPTX 結構無效或包含不安全的 XML、檔案關聯，請檢查或重新匯出檔案。',
             'pptx_no_text' => 'PPTX 沒有可提取的正文文字，請先將圖片內容辨識為文字。',
-            'pptx_expansion_too_large' => 'PPTX 解壓後的單檔案、總量或壓縮比超過限制，已停止解析。',
+            'pptx_expansion_too_large' => 'PPTX 的展開大小、壓縮比、結構數量或屬性長度超過限制，已停止解析。',
             'files_limit' => '一次最多上傳 10 個知識文件',
             'file_type_invalid' => '不支援的檔案格式，請上傳 TXT、MD、DOCX、PDF 或 PPTX；舊版 DOC、PPT 請先轉換。',
             'in_use' => '該知識庫正在被 :count 個任務引用，請先解除引用後再刪除',

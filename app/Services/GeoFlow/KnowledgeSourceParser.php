@@ -25,6 +25,18 @@ final class KnowledgeSourceParser
 
     private const MAX_PPTX_COMPRESSION_RATIO = 100;
 
+    private const MAX_PPTX_RELATIONSHIPS_PER_PART = 2048;
+
+    private const MAX_PPTX_RELATIONSHIPS = 16384;
+
+    private const MAX_PPTX_TEXT_NODES = 100000;
+
+    private const MAX_PPTX_ATTRIBUTE_BYTES = 1024;
+
+    private const MAX_PPTX_ID_BYTES = 255;
+
+    private const MAX_PPTX_PATH_SEGMENTS = 64;
+
     private const PRESENTATION_NAMESPACES = ['http://schemas.openxmlformats.org/presentationml/2006/main', 'http://purl.oclc.org/ooxml/presentationml/main'];
 
     private const DRAWING_NAMESPACES = ['http://schemas.openxmlformats.org/drawingml/2006/main', 'http://purl.oclc.org/ooxml/drawingml/main'];
@@ -534,15 +546,17 @@ final class KnowledgeSourceParser
         try {
             $entries = $this->validatePptxArchive($zip);
             $relationships = [];
+            $totalRelationships = 0;
             foreach ($entries as $name => $entry) {
                 if (str_ends_with($name, '.rels')) {
-                    $relationships[$name] = $this->pptxRelationships($zip, $name, $entries);
+                    $relationships[$name] = $this->pptxRelationships($zip, $name, $entries, $totalRelationships);
                 }
             }
 
             $slideIds = [];
+            $seenSlideIds = [];
             $listDepth = null;
-            $this->readPptxXml($zip, 'ppt/presentation.xml', function (\XMLReader $reader) use (&$slideIds, &$listDepth): void {
+            $this->readPptxXml($zip, 'ppt/presentation.xml', function (\XMLReader $reader) use (&$slideIds, &$seenSlideIds, &$listDepth): void {
                 if (! in_array($reader->namespaceURI, self::PRESENTATION_NAMESPACES, true)) {
                     return;
                 }
@@ -552,14 +566,22 @@ final class KnowledgeSourceParser
                 if ($reader->nodeType !== \XMLReader::ELEMENT || $reader->localName !== 'sldId' || $listDepth === null || $reader->depth !== $listDepth + 1) {
                     return;
                 }
+                if (count($slideIds) >= self::MAX_PPTX_ENTRIES) {
+                    throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
+                }
 
                 $id = null;
                 foreach (self::DOCUMENT_RELATIONSHIP_NAMESPACES as $namespace) {
                     $id ??= $reader->getAttributeNs('id', $namespace);
                 }
-                if (! is_string($id) || $id === '' || in_array($id, $slideIds, true)) {
+                if (! is_string($id) || $id === '') {
                     throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
                 }
+                $this->assertPptxAttributeBudget($id, self::MAX_PPTX_ID_BYTES);
+                if (isset($seenSlideIds[$id])) {
+                    throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
+                }
+                $seenSlideIds[$id] = true;
                 $slideIds[] = $id;
             });
 
@@ -570,6 +592,7 @@ final class KnowledgeSourceParser
             $slideRelationships = $relationships['ppt/_rels/presentation.xml.rels'] ?? [];
             $blocks = [];
             $contentBytes = 0;
+            $textNodes = 0;
             $visitedSlides = [];
             foreach ($slideIds as $index => $id) {
                 $relationship = $slideRelationships[$id] ?? null;
@@ -583,9 +606,12 @@ final class KnowledgeSourceParser
                 $visitedSlides[$relationship['target']] = true;
 
                 $lines = [];
-                $this->readPptxXml($zip, $relationship['target'], function (\XMLReader $reader) use (&$lines, &$contentBytes): void {
+                $this->readPptxXml($zip, $relationship['target'], function (\XMLReader $reader) use (&$lines, &$contentBytes, &$textNodes): void {
                     if ($reader->nodeType !== \XMLReader::ELEMENT || $reader->localName !== 't' || ! in_array($reader->namespaceURI, self::DRAWING_NAMESPACES, true)) {
                         return;
+                    }
+                    if (++$textNodes > self::MAX_PPTX_TEXT_NODES) {
+                        throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
                     }
                     $value = trim($reader->readString());
                     if ($value === '') {
@@ -636,6 +662,7 @@ final class KnowledgeSourceParser
                 || ($stat['encryption_method'] ?? \ZipArchive::EM_NONE) !== \ZipArchive::EM_NONE) {
                 throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
             }
+            $this->assertPptxPathBudget($name);
 
             $bytes = max(0, (int) ($stat['size'] ?? 0));
             $totalBytes += $bytes;
@@ -653,29 +680,42 @@ final class KnowledgeSourceParser
      * @param  array<string, true>  $entries
      * @return array<string, array{target:string,type:string}>
      */
-    private function pptxRelationships(\ZipArchive $zip, string $name, array $entries): array
+    private function pptxRelationships(\ZipArchive $zip, string $name, array $entries, int &$totalRelationships): array
     {
         if (! preg_match('~^(?:(.*)/)?_rels/[^/]*\.rels$~', $name, $matches)) {
             throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
         }
         $base = ($matches[1] ?? '') === '' ? '' : $matches[1].'/';
         $relationships = [];
-        $this->readPptxXml($zip, $name, function (\XMLReader $reader) use (&$relationships, $base, $entries): void {
+        $partRelationships = 0;
+        $this->readPptxXml($zip, $name, function (\XMLReader $reader) use (&$relationships, &$partRelationships, &$totalRelationships, $base, $entries): void {
             if ($reader->nodeType !== \XMLReader::ELEMENT || $reader->localName !== 'Relationship'
                 || $reader->namespaceURI !== 'http://schemas.openxmlformats.org/package/2006/relationships') {
                 return;
+            }
+            $partRelationships++;
+            $totalRelationships++;
+            if ($partRelationships > self::MAX_PPTX_RELATIONSHIPS_PER_PART || $totalRelationships > self::MAX_PPTX_RELATIONSHIPS) {
+                throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
             }
 
             $id = $reader->getAttribute('Id') ?? '';
             $target = $reader->getAttribute('Target') ?? '';
             $mode = $reader->getAttribute('TargetMode') ?? 'Internal';
+            $type = $reader->getAttribute('Type') ?? '';
+            $this->assertPptxAttributeBudget($id, self::MAX_PPTX_ID_BYTES);
+            $this->assertPptxAttributeBudget($mode);
+            $this->assertPptxAttributeBudget($type);
+            $this->assertPptxPathBudget($target);
             if ($id === '' || isset($relationships[$id]) || $mode !== 'Internal'
                 || $target === '' || str_starts_with($target, '//') || preg_match('~[\\\\\x00-\x20:%?#]~', $target)) {
                 throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
             }
 
+            $relativeTarget = str_starts_with($target, '/') ? substr($target, 1) : $base.$target;
+            $this->assertPptxPathBudget($relativeTarget);
             $segments = [];
-            foreach (explode('/', str_starts_with($target, '/') ? substr($target, 1) : $base.$target) as $segment) {
+            foreach (explode('/', $relativeTarget) as $segment) {
                 if ($segment === '..') {
                     if ($segments === []) {
                         throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
@@ -689,10 +729,25 @@ final class KnowledgeSourceParser
             if (! isset($entries[$resolved])) {
                 throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_invalid'));
             }
-            $relationships[$id] = ['target' => $resolved, 'type' => $reader->getAttribute('Type') ?? ''];
+            $relationships[$id] = ['target' => $resolved, 'type' => $type];
         });
 
         return $relationships;
+    }
+
+    private function assertPptxAttributeBudget(string $value, int $maxBytes = self::MAX_PPTX_ATTRIBUTE_BYTES): void
+    {
+        if (strlen($value) > $maxBytes) {
+            throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
+        }
+    }
+
+    private function assertPptxPathBudget(string $path): void
+    {
+        $this->assertPptxAttributeBudget($path);
+        if (substr_count($path, '/') >= self::MAX_PPTX_PATH_SEGMENTS) {
+            throw new \RuntimeException(__('admin.knowledge_bases.error.pptx_expansion_too_large'));
+        }
     }
 
     private function readPptxXml(\ZipArchive $zip, string $name, callable $visit): void
