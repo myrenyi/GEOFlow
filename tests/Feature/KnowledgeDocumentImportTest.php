@@ -24,6 +24,9 @@ class KnowledgeDocumentImportTest extends TestCase
     public static function documentFormats(): array
     {
         return [
+            'TXT' => ['txt', 'text', 'Plain text source evidence.'],
+            'MD' => ['md', 'markdown', '# Markdown source evidence.'],
+            'DOCX' => ['docx', 'word', 'Word source evidence & notes.'],
             'PDF' => ['pdf', 'pdf', 'PDF source evidence.'],
             'PPTX' => ['pptx', 'presentation', 'Presentation source evidence.'],
         ];
@@ -44,6 +47,7 @@ class KnowledgeDocumentImportTest extends TestCase
         $response->assertRedirect(route('admin.knowledge-bases.index'))->assertSessionHasNoErrors();
         $base = KnowledgeBase::query()->where('name', 'Imported document')->firstOrFail();
         $this->assertSame($type, $base->file_type);
+        $this->assertStringContainsString('# 文件：source.'.$extension, $base->content);
         $this->assertStringContainsString($body, $base->content);
         Storage::disk('local')->assertExists($base->file_path);
         $this->assertSame(file_get_contents($file->getPathname()), Storage::disk('local')->get($base->file_path));
@@ -68,6 +72,7 @@ class KnowledgeDocumentImportTest extends TestCase
         $response->assertRedirect(route('admin.enterprise-knowledge.show', $project->id));
         $source = $project->sources()->sole();
         $this->assertSame($type, $source->file_type);
+        $this->assertSame('source.'.$extension, $source->original_name);
         $this->assertStringContainsString($body, $source->content);
         Storage::disk('local')->assertExists($source->file_path);
         $this->assertSame(file_get_contents($file->getPathname()), Storage::disk('local')->get($source->file_path));
@@ -168,7 +173,12 @@ class KnowledgeDocumentImportTest extends TestCase
 
     private function document(string $extension, string $body): UploadedFile
     {
-        $bytes = $extension === 'pdf' ? KnowledgeDocumentFixtures::pdf($body, true) : KnowledgeDocumentFixtures::pptx([1 => $body]);
+        $bytes = match ($extension) {
+            'pdf' => KnowledgeDocumentFixtures::pdf($body, true),
+            'pptx' => KnowledgeDocumentFixtures::pptx([1 => $body]),
+            'docx' => KnowledgeDocumentFixtures::docx($body),
+            default => $body,
+        };
 
         return UploadedFile::fake()->createWithContent('source.'.$extension, $bytes);
     }
