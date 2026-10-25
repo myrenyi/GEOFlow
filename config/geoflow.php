@@ -69,6 +69,10 @@ if (array_diff($normalizedPrimaryHostCandidates, $primaryHosts) !== []) {
 
 return [
 
+    // 仅在 Web、队列与升级进程共用主题存储和升级锁目录时开启。多节点部署须先验证跨进程可见性。
+    'link_pool_theme_shared_storage' => filter_var(env('GEOFLOW_LINK_POOL_THEME_SHARED_STORAGE', false), FILTER_VALIDATE_BOOLEAN),
+    'link_pool_theme_readback_base_url' => rtrim((string) env('GEOFLOW_LINK_POOL_THEME_READBACK_BASE_URL', ''), '/'),
+
     // Admin UI V3 公共壳层。默认关闭，仅在独立 UI V3 环境显式开启。
     'admin_ui_v3_enabled' => filter_var(env('GEOFLOW_ADMIN_UI_V3_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
 
@@ -167,6 +171,8 @@ return [
     'updater_socket' => (string) env('GEOFLOW_UPDATER_SOCKET', '/run/geoflow-updater/geoflow-updater.sock'),
     'updater_control_token_file' => (string) env('GEOFLOW_UPDATER_CONTROL_TOKEN_FILE', '/run/secrets/geoflow-updater-control-token'),
     'updater_instance_id' => (string) env('GEOFLOW_UPDATER_INSTANCE_ID', 'primary'),
+    'recovery_contract_required' => filter_var(env('GEOFLOW_RECOVERY_CONTRACT', false), FILTER_VALIDATE_BOOLEAN),
+    'recovery_control_directory' => '/run/geoflow-recovery-control',
     'updater_host_root' => rtrim((string) env('GEOFLOW_UPDATER_HOST_ROOT', ''), '/'),
     'updater_connect_timeout_seconds' => max(0.1, (float) env('GEOFLOW_UPDATER_CONNECT_TIMEOUT_SECONDS', 0.5)),
     'updater_read_timeout_seconds' => max(1, (int) env('GEOFLOW_UPDATER_READ_TIMEOUT_SECONDS', 10)),
@@ -181,10 +187,11 @@ return [
     'theme_replication_package_lock_timeout_milliseconds' => max(1, (int) env('GEOFLOW_THEME_REPLICATION_PACKAGE_LOCK_TIMEOUT_MS', 5000)),
 
     'theme_packages' => [
-        'max_archive_bytes' => 10 * 1024 * 1024,
+        'max_archive_bytes' => 32 * 1024 * 1024,
         'max_files' => 500,
         'max_file_bytes' => 5 * 1024 * 1024,
-        'max_total_bytes' => 25 * 1024 * 1024,
+        'max_video_file_bytes' => 25 * 1024 * 1024,
+        'max_total_bytes' => 40 * 1024 * 1024,
         'ttl_minutes' => 60,
         'lock_timeout_milliseconds' => 5000,
     ],
@@ -273,11 +280,6 @@ return [
     ],
     // 统一出站安全网关：仅此处列出的精确 host:port 可连接私网地址；不支持通配符或路径。
     'outbound_private_targets' => array_values(array_filter(array_map('trim', explode(',', (string) env('GEOFLOW_OUTBOUND_PRIVATE_TARGETS', ''))), static fn (string $target): bool => $target !== '')),
-    // 出口代理：仅当 GEOFLOW_OUTBOUND_PROXY 与 GEOFLOW_OUTBOUND_PROXY_HOSTS 同时配置时才生效；
-    // host 支持精确（jshh.com）、后缀（*.jshh.com）、通配（* / . 三选一代表全部）。
-    // 仅 GEOFlow 公网出站会走代理；私网目标由 outbound_private_targets 控制，永远直连。
-    'outbound_proxy_url' => env('GEOFLOW_OUTBOUND_PROXY'),
-    'outbound_proxy_hosts' => (string) env('GEOFLOW_OUTBOUND_PROXY_HOSTS', ''),
     'outbound_json_max_bytes' => max(1, (int) env('GEOFLOW_OUTBOUND_JSON_MAX_BYTES', 4 * 1024 * 1024)),
     'outbound_ai_max_bytes' => max(1, (int) env('GEOFLOW_OUTBOUND_AI_MAX_BYTES', 8 * 1024 * 1024)),
     'outbound_import_max_bytes' => max(1, (int) env('GEOFLOW_OUTBOUND_IMPORT_MAX_BYTES', 5 * 1024 * 1024)),

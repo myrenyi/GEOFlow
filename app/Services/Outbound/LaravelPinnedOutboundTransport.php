@@ -29,7 +29,7 @@ final class LaravelPinnedOutboundTransport implements OutboundTransport
             'allow_redirects' => false,
             'decode_content' => false,
             'http_errors' => false,
-            'proxy' => $target->proxyUrl ?? '',
+            'proxy' => '',
             'stream' => false,
             'verify' => true,
             'force_ip_resolve' => str_contains($target->selectedIp, ':') ? 'v6' : 'v4',

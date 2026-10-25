@@ -399,7 +399,6 @@ class AiModelController extends Controller
             $modelName = trim($snapshot->providerModelId);
             $isGemini = $snapshot->gemini;
             $usesOpenAiResponses = $snapshot->usesOpenAiResponses;
-            $isVolcengineMultimodal = $snapshot->volcengineMultimodal;
 
             if ($endpoint === '') {
                 return $this->modelTestResponse(
@@ -486,9 +485,8 @@ class AiModelController extends Controller
                 }
                 $reservation = null;
 
-                $workspaceConnection = $request->boolean('workspace_check')
-                    ? $this->workspaceConnectionStatus->forAdmin(Admin::query()->findOrFail($snapshot->adminId))
-                    : null;
+                $workspaceConnection = $this->workspaceConnectionStatus
+                    ->forAdmin(Admin::query()->findOrFail($snapshot->adminId));
 
                 return $this->modelTestResponse(
                     true,
@@ -498,7 +496,7 @@ class AiModelController extends Controller
                     (string) $result['endpoint'],
                     (int) $result['http_status'],
                     [
-                        'workspace_ready' => $workspaceConnection['ready'] ?? true,
+                        'workspace_ready' => $workspaceConnection['ready'],
                         'workspace_connection' => $workspaceConnection,
                         'readiness_status' => (string) $result['readiness_status'],
                         'readiness_profile' => (array) $result['profile'],
@@ -516,7 +514,7 @@ class AiModelController extends Controller
                 ? $request->withHeaders(['x-goog-api-key' => $apiKey])
                 : $request->withToken($apiKey);
 
-            $testPayload = $this->buildTestPayload($modelName, $modelType, $isGemini, $usesOpenAiResponses, $isVolcengineMultimodal);
+            $testPayload = $this->buildTestPayload($modelName, $modelType, $isGemini, $usesOpenAiResponses);
             $response = $this->safeHttp->post(
                 $request,
                 $endpoint,
@@ -556,7 +554,7 @@ class AiModelController extends Controller
                 );
             }
 
-            if (! $this->isValidTestResponse($json, $modelType, $isGemini, $usesOpenAiResponses, $isVolcengineMultimodal)) {
+            if (! $this->isValidTestResponse($json, $modelType, $isGemini, $usesOpenAiResponses)) {
                 $usageSession->discarded('direct.p1', 'ai_provider_response_invalid', $json['usage'] ?? null);
                 if ($reservation instanceof AiUsageReservation) {
                     $this->recordModelTestAttempt($reservation);
@@ -962,8 +960,7 @@ class AiModelController extends Controller
         string $modelName,
         string $modelType,
         bool $isGemini = false,
-        bool $usesOpenAiResponses = false,
-        bool $isVolcengineMultimodal = false
+        bool $usesOpenAiResponses = false
     ): array {
         if ($isGemini) {
             if ($modelType === 'embedding') {
@@ -1007,15 +1004,6 @@ class AiModelController extends Controller
             ];
         }
 
-        if ($modelType === 'embedding' && $isVolcengineMultimodal) {
-            return [
-                'model' => $modelName,
-                'input' => [
-                    ['type' => 'text', 'text' => 'GEOFlow embedding connection test'],
-                ],
-            ];
-        }
-
         if ($modelType === 'embedding') {
             return [
                 'model' => $modelName,
@@ -1045,8 +1033,7 @@ class AiModelController extends Controller
         mixed $json,
         string $modelType,
         bool $isGemini = false,
-        bool $usesOpenAiResponses = false,
-        bool $isVolcengineMultimodal = false
+        bool $usesOpenAiResponses = false
     ): bool {
         if (! is_array($json)) {
             return false;

@@ -59,7 +59,6 @@ final class SafeOutboundHttpClient
     public function __construct(
         private readonly HostResolver $resolver,
         private readonly OutboundTransport $transport,
-        private readonly OutboundProxyPolicy $proxyPolicy = new OutboundProxyPolicy(null, []),
     ) {}
 
     /** @param array<string, mixed> $query */
@@ -117,7 +116,6 @@ final class SafeOutboundHttpClient
 
         while (true) {
             $target = $this->resolveTarget($currentUrl);
-            $target = $this->applyProxyPolicy($target);
             $crossOrigin = $previousTarget instanceof ResolvedOutboundTarget && ! $this->sameOrigin($previousTarget, $target);
             if ($crossOrigin) {
                 $currentRequest = CrossOriginRequestSanitizer::pendingRequest($currentRequest, $method, $target->url);
@@ -166,23 +164,6 @@ final class SafeOutboundHttpClient
                 $currentRequest = $this->clearRequestEntity($currentRequest);
             }
         }
-    }
-
-    private function applyProxyPolicy(ResolvedOutboundTarget $target): ResolvedOutboundTarget
-    {
-        if ($target->proxyUrl !== null || ! $this->proxyPolicy->appliesTo($target->host)) {
-            return $target;
-        }
-
-        return new ResolvedOutboundTarget(
-            $target->url,
-            $target->scheme,
-            $target->host,
-            $target->port,
-            $target->addresses,
-            $target->selectedIp,
-            (string) $this->proxyPolicy->proxyUrl,
-        );
     }
 
     public function resolveTarget(string $url): ResolvedOutboundTarget

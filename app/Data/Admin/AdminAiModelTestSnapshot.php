@@ -27,7 +27,6 @@ final class AdminAiModelTestSnapshot implements JsonSerializable
         public readonly ?int $maxTokens,
         public readonly bool $gemini,
         public readonly bool $usesOpenAiResponses,
-        public readonly bool $volcengineMultimodal,
         public readonly bool $preparedAsSuperAdmin,
         public readonly ?AiUsageReservation $reservation,
         private readonly string $encryptedApiKey,
